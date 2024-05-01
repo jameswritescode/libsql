@@ -21,7 +21,7 @@ use tower_http::{
 };
 use uuid::Uuid;
 
-use crate::util::{ConnectorService, HttpRequestCallback};
+use crate::util::{ConnectorService, HttpRequestCallbackGrpc};
 
 use crate::util::box_clone_service::BoxCloneService;
 
@@ -46,7 +46,7 @@ impl Client {
         origin: Uri,
         auth_token: impl AsRef<str>,
         version: Option<&str>,
-        http_request_callback: Option<HttpRequestCallback>,
+        http_request_callback: Option<HttpRequestCallbackGrpc>,
         maybe_namespace: Option<String>,
     ) -> anyhow::Result<Self> {
         let ver = version.unwrap_or(env!("CARGO_PKG_VERSION"));
@@ -66,7 +66,7 @@ impl Client {
         } else {
             "default".to_string()
         };
-        
+
         let namespace = BinaryMetadataValue::from_bytes(ns.as_bytes());
 
         let channel = GrpcChannel::new(connector, http_request_callback);
@@ -134,7 +134,7 @@ pub struct GrpcChannel {
 impl GrpcChannel {
     pub fn new(
         connector: ConnectorService,
-        http_request_callback: Option<HttpRequestCallback>,
+        http_request_callback: Option<HttpRequestCallbackGrpc>,
     ) -> Self {
         let client = hyper::Client::builder()
             .pool_idle_timeout(None)

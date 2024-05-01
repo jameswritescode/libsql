@@ -82,8 +82,8 @@ impl Database {
         read_your_writes: bool,
         encryption_config: Option<EncryptionConfig>,
         sync_interval: Option<std::time::Duration>,
-        http_request_callback: Option<crate::util::HttpRequestCallback>,
-        namespace: Option<String>
+        http_request_callback: Option<crate::util::HttpRequestCallbackGrpc>,
+        namespace: Option<String>,
     ) -> Result<Database> {
         use std::path::PathBuf;
 
@@ -159,7 +159,8 @@ impl Database {
         version: Option<String>,
         flags: OpenFlags,
         encryption_config: Option<EncryptionConfig>,
-        http_request_callback: Option<crate::util::HttpRequestCallback>,
+        http_request_callback: Option<crate::util::HttpRequestCallbackGrpc>,
+        namespace: Option<String>,
     ) -> Result<Database> {
         use std::path::PathBuf;
 
@@ -178,7 +179,7 @@ impl Database {
             auth_token,
             version.as_deref(),
             http_request_callback,
-            None,
+            namespace,
         )
         .map_err(|e| crate::Error::Replication(e.into()))?;
 

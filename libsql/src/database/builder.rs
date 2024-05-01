@@ -74,7 +74,8 @@ impl Builder<()> {
                     flags: crate::OpenFlags::default(),
                     remote: None,
                     encryption_config: None,
-                    http_request_callback: None
+                    http_request_callback: None,
+                    namespace: None,
                 },
             }
         }
@@ -82,13 +83,17 @@ impl Builder<()> {
 
     cfg_remote! {
         /// Create a new remote database.
-        pub fn new_remote(url: String, auth_token: String) -> Builder<Remote> {
+        pub fn new_remote(url: String, auth_token: String) -> Builder<RemoteInner> {
             Builder {
-                inner: Remote {
-                    url,
-                    auth_token,
-                    connector: None,
-                    version: None,
+                inner: RemoteInner {
+                    remote: Remote {
+                        url,
+                        auth_token,
+                        connector: None,
+                        version: None,
+                    },
+                    http_request_callback: None,
+                    namespace: None,
                 },
             }
         }
@@ -166,7 +171,7 @@ cfg_replication! {
         encryption_config: Option<EncryptionConfig>,
         read_your_writes: bool,
         sync_interval: Option<std::time::Duration>,
-        http_request_callback: Option<crate::util::HttpRequestCallback>,
+        http_request_callback: Option<crate::util::HttpRequestCallbackGrpc>,
         namespace: Option<String>,
     }
 
@@ -176,7 +181,8 @@ cfg_replication! {
         flags: crate::OpenFlags,
         remote: Option<Remote>,
         encryption_config: Option<EncryptionConfig>,
-        http_request_callback: Option<crate::util::HttpRequestCallback>,
+        http_request_callback: Option<crate::util::HttpRequestCallbackGrpc>,
+        namespace: Option<String>,
     }
 
     impl Builder<RemoteReplica> {
@@ -311,6 +317,13 @@ cfg_replication! {
 
         }
 
+        /// Set the namespace that will be communicated to remote replica in the http header.
+        pub fn namespace(mut self, namespace: impl Into<String>) -> Builder<LocalReplica>
+        {
+            self.inner.namespace = Some(namespace.into());
+            self
+        }
+
         /// Build the local embedded replica database.
         pub async fn build(self) -> Result<Database> {
             let LocalReplica {
@@ -318,7 +331,8 @@ cfg_replication! {
                 flags,
                 remote,
                 encryption_config,
-                http_request_callback
+                http_request_callback,
+                namespace,
             } = self.inner;
 
             let path = path.to_str().ok_or(crate::Error::InvalidUTF8Path)?.to_owned();
@@ -352,6 +366,7 @@ cfg_replication! {
                     flags,
                     encryption_config.clone(),
                     http_request_callback,
+                    namespace,
                 )
                 .await?
             } else {
@@ -366,32 +381,59 @@ cfg_replication! {
 }
 
 cfg_remote! {
-    impl Builder<Remote> {
+    use hyper::Body;
+
+    pub struct RemoteInner {
+        remote: Remote,
+        http_request_callback: Option<crate::util::HttpRequestCallbackHttp>,
+        namespace: Option<String>,
+    }
+
+    impl Builder<RemoteInner> {
         /// Provide a custom http connector that will be used to create http connections.
-        pub fn connector<C>(mut self, connector: C) -> Builder<Remote>
+        pub fn connector<C>(mut self, connector: C) -> Builder<RemoteInner>
         where
             C: tower::Service<http::Uri> + Send + Clone + Sync + 'static,
             C::Response: crate::util::Socket,
             C::Future: Send + 'static,
             C::Error: Into<Box<dyn std::error::Error + Send + Sync>>,
         {
-            self.inner = self.inner.connector(connector);
+            self.inner.remote = self.inner.remote.connector(connector);
             self
         }
 
         #[doc(hidden)]
-        pub fn version(mut self, version: String) -> Builder<Remote> {
-            self.inner = self.inner.version(version);
+        pub fn version(mut self, version: String) -> Builder<RemoteInner> {
+            self.inner.remote = self.inner.remote.version(version);
+            self
+        }
+
+        pub fn http_request_callback<F>(mut self, f: F) -> Builder<RemoteInner>
+        where
+            F: Fn(&mut http::Request<Body>) + Send + Sync + 'static
+        {
+            self.inner.http_request_callback = Some(std::sync::Arc::new(f));
+            self
+        }
+
+        /// Set the namespace that will be communicated to remote replica in the http header.
+        pub fn namespace(mut self, namespace: impl Into<String>) -> Builder<RemoteInner>
+        {
+            self.inner.namespace = Some(namespace.into());
             self
         }
 
         /// Build the remote database client.
         pub async fn build(self) -> Result<Database> {
-            let Remote {
-                url,
-                auth_token,
-                connector,
-                version,
+            let RemoteInner {
+                remote: Remote {
+                    url,
+                    auth_token,
+                    connector,
+                    version,
+                },
+                http_request_callback,
+                namespace,
             } = self.inner;
 
             let connector = if let Some(connector) = connector {
@@ -413,6 +455,8 @@ cfg_remote! {
                     auth_token,
                     connector,
                     version,
+                    http_request_callback,
+                    namespace,
                 },
             })
         }

@@ -5,7 +5,11 @@ cfg_replication_or_remote! {
 }
 
 cfg_replication! {
-    pub(crate) use self::http::HttpRequestCallback;
+    pub(crate) use self::http::HttpRequestCallbackGrpc;
+}
+
+cfg_remote! {
+    pub(crate) use self::http::HttpRequestCallbackHttp;
 }
 
 cfg_replication_or_remote_or_hrana! {

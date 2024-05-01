@@ -1,4 +1,5 @@
 use super::box_clone_service::BoxCloneService;
+use hyper::Body;
 use tokio::io::{AsyncRead, AsyncWrite};
 
 pub trait Socket:
@@ -21,4 +22,6 @@ pub type ConnectorService =
     BoxCloneService<http::Uri, Box<dyn Socket>, Box<dyn std::error::Error + Sync + Send + 'static>>;
 
 #[cfg(feature = "replication")]
-pub type HttpRequestCallback = std::sync::Arc<dyn Fn(&mut http::Request<()>) + Send + Sync>;
+type HttpRequestCallback<T> = std::sync::Arc<dyn Fn(&mut http::Request<T>) + Send + Sync>;
+pub type HttpRequestCallbackGrpc = HttpRequestCallback<()>;
+pub type HttpRequestCallbackHttp = HttpRequestCallback<Body>;
